@@ -1,0 +1,84 @@
+# -------------------------------
+# build-system
+# -------------------------------
+[build-system]
+requires = [
+    "setuptools>=61.0",
+    "wheel"
+]
+build-backend = "setuptools.build_meta"
+
+# -------------------------------
+# project (PEP 621 metadata)
+# -------------------------------
+[project]
+name = "situatedthinker"
+
+description = "SituatedThinker: Grounding LLM Reasoning with Real-World through Situated Thinking"
+license = {file = "Apache-2.0"} 
+readme = {file = "../../README.md", content-type = "text/markdown"}
+version = "0.1.0"
+
+authors = [
+  { name = "Junnan Liu", email = "to.liujn@outlook.com" },
+]
+
+# Dependencies corresponding to install_requires in setup.py
+dependencies = [
+  "accelerate==1.4.0",
+  "antlr4-python3-runtime==4.9.3",
+  "codetiming==1.4.0",
+  "datasets==3.3.2",
+  "dill==0.3.8",
+  "e2b==1.1.0",
+  "e2b-code-interpreter==1.0.5",
+  "faiss-gpu-cu12==1.10.0",
+  "fastapi==0.115.11",
+  "flashinfer-python==0.2.5",
+  "FlagEmbedding==1.3.4",
+  "httpx==0.28.1",
+  "hydra-core==1.3.2",
+  "liger-kernel==0.5.3",
+  "latex2sympy2_extended==1.10.1",
+  "llama-index==0.12.37",
+  "math_verify==0.7.0",
+  "ninja",
+  "numpy==1.26.4",
+  "pandas==2.2.3",
+  "peft==0.14.0",
+  "polars==1.29.0",
+  "pyarrow==19.0.1",
+  "pybind11==2.13.6",
+  "pylatexenc==2.10",
+  "ray==2.43.0",
+  "sandbox-fusion==0.3.7",
+  "sentence-transformers==3.4.1",
+  "swanlab==0.5.3",
+  "tabulate==0.9.0",
+  "tensordict==0.6.2",
+  "textworld==1.6.2",
+  "torchdata==0.11.0",
+  "transformers==4.51.3",
+  "vllm==0.8.4",
+  "wandb==0.19.7",
+]
+
+# URLs
+[project.urls]
+Homepage = "https://github.com/jnanliu/SituatedThinker"
+
+# -------------------------------
+# tool.setuptools - Additional config
+# -------------------------------
+[tool.setuptools]
+# True means `setuptools` will attempt to include all relevant files in package_data automatically.
+# This corresponds to `include_package_data=True` in setup.py.
+include-package-data = true
+
+[tool.setuptools.package-dir]
+"" = "."
+
+[tool.setuptools.package-data]
+verl = [
+  "trainer/config/*.yaml"
+]
