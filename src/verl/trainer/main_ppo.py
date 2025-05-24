@@ -78,7 +78,7 @@ def run_ppo(config) -> None:
 
 @ray.remote(num_cpus=1)  # please make sure main_task is not scheduled on head
 class TaskRunner:
-    def run(self, config):
+    async def run(self, config):
         # print initial config
         from pprint import pprint
 
@@ -186,7 +186,7 @@ class TaskRunner:
             train_sampler=train_sampler,
         )
         trainer.init_workers()
-        trainer.fit()
+        await trainer.fit()
 
 
 def create_rl_dataset(data_paths, data_config, tokenizer, processor):

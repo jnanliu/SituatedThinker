@@ -72,6 +72,8 @@ class SituatedThinkerCompletionScheduler:
         module = importlib.import_module(module_path)
         self.interface_zoo: InterfaceZoo = getattr(module, var_name)
 
+        self.completion_sem = asyncio.Semaphore(256)
+
     async def submit_completions(
         self,
         callback: Callable[[Completion, Dict[str, Any], Exception], None],
@@ -125,7 +127,8 @@ class SituatedThinkerCompletionScheduler:
         completions, exception = None, None
         try:
             # TODO: OpenAI client uses httpx, seems to have performance issue in high concurrency requests.
-            completions = await self._openai_completion(address, **completion_request)
+            async with self.completion_sem:
+                completions = await self._openai_completion(address, **completion_request)
         except Exception as e:
             # Let user handle the exception
             exception = e
@@ -136,6 +139,7 @@ class SituatedThinkerCompletionScheduler:
         client = AsyncOpenAI(
             base_url=f"http://{address}/v1",
             api_key="token-abc123",
+            timeout=None
         )
         return await client.completions.create(**completion_request)
 
@@ -185,7 +189,7 @@ class SituatedThinkerCompletionScheduler:
 
         async def callback(completion_obj: Completion, info: Dict[str, Any], exception: Exception):
             if exception is not None:
-                print(exception)
+                raise exception
             index = info["index"]
             output: CompletionOutput = info["output"]
             request = info["request"]

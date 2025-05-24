@@ -299,13 +299,13 @@ class AsyncLLMServerManager:
         self.scheduler_ready.set()
         self.scheduler_loop.run_forever()
 
-    def wake_up(self):
+    async def wake_up(self):
         """Wake up all vllm instances."""
-        ray.get([server.wake_up.remote() for server in self.async_llm_servers])
+        await asyncio.gather(*[worker.wake_up.remote() for worker in self.async_llm_servers])
 
-    def sleep(self):
+    async def sleep(self):
         """Sleep all vllm instances."""
-        ray.get([server.sleep.remote() for server in self.async_llm_servers])
+        await asyncio.gather(*[worker.sleep.remote() for worker in self.async_llm_servers])
 
     # def submit_chat_completions(
     #     self,
@@ -329,13 +329,11 @@ class AsyncLLMServerManager:
     #     )
     #     future.result()
 
-    def generate_sequences(self, prompts: DataProto, **sampling_params) -> DataProto:
+    async def generate_sequences(self, prompts: DataProto, **sampling_params) -> DataProto:
         """Generate multiple sequences in parallel via chat scheduler."""
         assert self.scheduler is not None, "chat scheduler is not initialized."
 
-        future = asyncio.run_coroutine_threadsafe(
-            self.scheduler.generate_sequences(prompts, **sampling_params), self.scheduler_loop)
-        return future.result()
+        return await self.scheduler.generate_sequences(prompts, **sampling_params)
 
 
 def async_server_class(rollout_backend: str, chat: bool) -> Type[AsyncServerBase]:
