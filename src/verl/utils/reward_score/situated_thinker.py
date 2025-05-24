@@ -220,7 +220,7 @@ def compute_math_score(
     completion: str, 
     ground_truths: List[str], 
     is_validate: bool = False, 
-    math_verify: bool = True,
+    math_verify: bool = False,
 ) -> float:
     """
     Compute the math reward by verifying the mathematical equivalence of the prediction and ground truth.
