@@ -1,7 +1,69 @@
 import traceback
 
-from sandbox_fusion import run_code, run_code_async, RunCodeRequest, RunCodeResponse, RunStatus
+import asyncio
+import aiohttp
+import logging
+from typing import List, Optional
 
+from tenacity import RetryCallState
+from sandbox_fusion.common import trim_slash
+from sandbox_fusion.client import wraps, retry, wait_exponential_jitter, stop_after_attempt, before_retry_sleep
+from sandbox_fusion import config
+
+from sandbox_fusion.models import RunCodeRequest, RunCodeResponse, RunStatus
+
+logger = logging.getLogger(__name__)
+
+
+def on_retry_error(s):
+    e = s.outcome.exception()
+    error_msg = "\n".join(traceback.format_exc().split('\n')[-3:])
+    logger.error(f'give up requesting sandbox. error: {error_msg}')
+    raise e
+
+def configurable_retry(max_attempts):
+
+    def decorator(func):
+
+        @wraps(func)
+        @retry(wait=wait_exponential_jitter(),
+               stop=stop_after_attempt(max_attempts),
+               before_sleep=before_retry_sleep,
+               retry_error_callback=on_retry_error)
+        async def async_wrapper(*args, **kwargs):
+            return await func(*args, **kwargs)
+
+        @wraps(func)
+        @retry(wait=wait_exponential_jitter(),
+               stop=stop_after_attempt(max_attempts),
+               before_sleep=before_retry_sleep,
+               retry_error_callback=on_retry_error)
+        def sync_wrapper(*args, **kwargs):
+            return func(*args, **kwargs)
+
+        return async_wrapper if asyncio.iscoroutinefunction(func) else sync_wrapper
+
+    return decorator
+
+async def run_code(request: RunCodeRequest,
+                   endpoint: str = '',
+                   max_attempts: int = 5,
+                   client_timeout: Optional[float] = None) -> RunCodeResponse:
+
+    @configurable_retry(max_attempts)
+    async def _run_code(request: RunCodeRequest) -> RunCodeResponse:
+        timeout = aiohttp.ClientTimeout(total=client_timeout) if client_timeout else None
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            async with session.post(f'{trim_slash(endpoint or config.SANDBOX_ENDPOINT)}/run_code',
+                                    json=request.dict()) as result:
+                if result.status != 200:
+                    raise Exception(f'Faas api responded with code {result.status}: {await result.text()}')
+                resp = RunCodeResponse(**(await result.json()))
+                if resp.status == RunStatus.SandboxError:
+                    raise Exception(f'Sandbox responded with error: {resp.message}')
+                return resp
+
+    return await _run_code(request)
 
 async def code_executor(code_snippet: str) -> str:
     """
@@ -28,9 +90,9 @@ async def code_executor(code_snippet: str) -> str:
             code_snippet = "\n".join(code)
 
         # Asynchronously execute the code using the sandbox fusion service
-        output: RunCodeResponse = await run_code_async(
+        output: RunCodeResponse = await run_code(
             RunCodeRequest(code=code_snippet, language="python"), 
-            max_attempts=5,
+            max_attempts=1,
             client_timeout=5
         )
         # Check if the code execution was successful
