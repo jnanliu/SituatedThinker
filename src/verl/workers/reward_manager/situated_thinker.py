@@ -106,9 +106,8 @@ class SituatedThinkerRewardManager:
         # Get the accuracy score from the score dictionary
         reward = score_dict["accuracy_score"]
         # Adjust the reward if the format score is 0 and accuracy score is 0
-        if score_dict["format_score"] == 0: 
-            if reward == 0:
-                reward = -0.1
+        if not self.is_validate and score_dict["format_score"] == 0 and reward == 0: 
+            reward = -0.1
 
         # Update the score dictionary with penalty rewards and the final reward
         score_dict.update({

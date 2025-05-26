@@ -12,26 +12,12 @@ import scorers.question_answering
 format_pattern = re.compile(
     r"""
     ^                               # Start of the string
-    # Ensure no duplicate <conclusion> tags
-    (?!.*<conclusion>.*<conclusion>)
-    # Ensure no duplicate </conclusion> tags
-    (?!.*</conclusion>.*</conclusion>)
-    # Ensure no duplicate \boxed commands
-    (?!.*\\boxed.*\\boxed)
-    # Capture the reasoning part non-greedily
     (?P<reasoning>.*?)
     <conclusion>                    # Match the opening <conclusion> tag
-    \s*                             # Match zero or more whitespace characters
     # Capture the conclusion part
     (?P<conclusion>
         .*?                         # Match any characters non-greedily
-        The\s+answer\s+is\s+\\boxed\{ # Match the literal string "The answer is \boxed{"
-        # Capture the answer part
-        (?P<answer>.+?)
-        \}                          # Match the closing brace
-        .*?                         # Match any characters non-greedily
     )
-    \s*                             # Match zero or more whitespace characters
     </conclusion>                   # Match the closing </conclusion> tag
     $                               # End of the string
     """,
@@ -39,86 +25,75 @@ format_pattern = re.compile(
 )
 boxed_pattern = re.compile(
     r"""
-    ^                               # Start of the string
-    # Ensure no duplicate \boxed commands
-    (?!.*\\boxed.*\\boxed)
-    .*?                             # Match any characters non-greedily
     \\boxed\{                       # Match the literal string "\boxed{"
     # Capture the boxed part
-    (?P<boxed>.+?)
+    ([^{}]*)
     \}                              # Match the closing brace
-    .*?                             # Match any characters non-greedily
-    $                               # End of the string
     """,
     re.DOTALL | re.VERBOSE,
 )
 
-def extract_reasoning(completion: str)  -> str | None:
+def parse_response(completion: str) -> Dict[str, str] | None:
     """
-    Extract the reasoning part from the given completion string.
+    Parse the given completion string to extract the reasoning process, conclusion block, and answer.
 
-    This function uses a predefined regular expression pattern to search for the reasoning
-    part before the <conclusion> tag in the input string.
-
-    Args: 
-        completion (str): The input string from which the reasoning is to be extracted.
-
-    Returns:
-        str | None: The extracted reasoning string if found, otherwise None.
-    """
-    # Strip leading and trailing whitespace from the input string
-    # and attempt to match it against the predefined regular expression pattern
-    match = format_pattern.match(completion.strip())
-    # If a match is found, return the 'reasoning' named group from the match object
-    # Otherwise, return None
-    return match.group("reasoning") if match else None
-
-def extract_conclusion(completion: str)  -> str | None:
-    """
-    Extract the conclusion part from the given completion string.
-
-    This function uses a predefined regular expression pattern to search for the conclusion
-    enclosed between <conclusion> and </conclusion> tags in the input string.
-
-    Args: 
-        completion (str): The input string from which the conclusion is to be extracted.
-
-    Returns:
-        str | None: The extracted conclusion string if found, otherwise None.
-    """
-    # Strip leading and trailing whitespace from the input string
-    # Then attempt to match the entire string against the predefined regular expression pattern
-    match = format_pattern.match(completion.strip())
-    # If a match is found, extract and return the 'conclusion' named group from the match object
-    # Otherwise, return None
-    return match.group("conclusion") if match else None
-
-def extract_answer(completion: str) -> str | None:
-    """
-    Extract the answer part from the given completion string.
-
-    This function uses a predefined regular expression pattern to search for the answer
-    enclosed within the <conclusion> tags and the \\boxed{} environment in the input string.
+    This function checks if the completion string contains exactly one <conclusion> tag, 
+    one </conclusion> tag, and the closing tag comes after the opening tag. It also checks 
+    if the string contains exactly one \\boxed{} environment. If all checks pass, it uses 
+    predefined regular expression patterns to extract the reasoning process, conclusion block, 
+    and answer.
 
     Args:
-        completion (str): The input string from which the answer is to be extracted.
+        completion (str): The completion string to be parsed.
 
     Returns:
-        str | None: The extracted answer string if found, otherwise None.
+        Dict[str, str] | None: A dictionary containing the keys "reasoning", "conclusion", 
+        and "answer", or None if parsing fails.
     """
-    # Strip leading and trailing whitespace from the input string
-    # Then attempt to match the entire string against the predefined regular expression pattern
-    match = format_pattern.match(completion.strip())
-    # If a match is found, extract and return the 'answer' named group from the match object
-    # Otherwise, return None
-    return match.group("answer") if match else None
+    # Check if the number of <conclusion> and </conclusion> tags is correct, 
+    # and if the closing tag appears after the opening tag
+    if (
+        completion.count("<conclusion>") != 1 or 
+        completion.count("</conclusion>") != 1 or 
+        completion.rfind("</conclusion>") < completion.find("<conclusion>")
+    ):
+        # Return None if the format is incorrect
+        return None
+    # Check if the number of \\boxed{} environments is exactly one
+    if completion.count('\\boxed{') != 1:
+        # Return None if the format is incorrect
+        return None
+    
+    # Attempt to match the entire completion string using the predefined format_pattern
+    match = format_pattern.match(completion)
+    if not match:
+        # Return None if the matching fails
+        return None
+    
+    # Extract the reasoning process from the match result and strip leading and trailing whitespace
+    reasoning = match.group("reasoning").strip()
+    # Extract the conclusion block from the match result and strip leading and trailing whitespace
+    conclusion_block = match.group("conclusion").strip()
+
+    # Attempt to match the entire completion string using the predefined boxed_pattern
+    boxed_match = boxed_pattern.findall(completion)
+    if not boxed_match:
+        # Return None if the matching fails
+        return None
+    
+    # Return a dictionary containing the reasoning process, conclusion block, and answer
+    return {
+        "reasoning": reasoning,
+        "conclusion": conclusion_block,
+        "answer": boxed_match[-1]
+    }
 
 def extract_boxed(completion: str) -> str | None:
     """
     Extract the content enclosed within the \\boxed{} environment from the given completion string.
 
     This function uses a predefined regular expression pattern to search for all occurrences of
-    content within the \\boxed{} environment in the input string. It then returns the first match
+    content within the \\boxed{} environment in the input string. It then returns the last match
     if any matches are found.
 
     Args:
@@ -127,35 +102,13 @@ def extract_boxed(completion: str) -> str | None:
     Returns:
         str | None: The extracted content if found, otherwise None.
     """
-    # Strip leading and trailing whitespace from the input string
-    # to ensure accurate matching with the regular expression pattern
-    # Then attempt to match the entire stripped string against the predefined boxed_pattern
-    match = boxed_pattern.match(completion.strip())
-    # Check if a match was found using the regular expression pattern
-    # If a match is found, retrieve the 'boxed' named group from the match object
-    # Otherwise, return None indicating no \\boxed{} content was found
-    return match.group("boxed") if match else None
-
-def check_format(completion: str) -> bool:
-    """
-    Check if the given completion string matches the predefined format pattern.
-
-    This function uses the `re.match` method to attempt to match the entire 
-    `completion` string against the `format_pattern`. The `re.DOTALL` flag, which is set 
-    when compiling `format_pattern`, allows the dot (`.`) to match any character including newlines. 
-    Note that `re.MULTILINE` flag is not used here; in the current `format_pattern`, `^` and `$` 
-    match the start and end of the entire string.
-
-    Args:
-        completion (str): The input string to be checked against the format pattern.
-
-    Returns:
-        bool: True if the `completion` string matches the format pattern, False otherwise.
-    """
-    # Use re.match to check if the stripped completion string matches the format pattern
-    # If a match is found, re.match returns a match object; otherwise, it returns None
-    # Convert the result to a boolean value: True if a match is found, False otherwise
-    return format_pattern.match(completion.strip()) is not None
+    # Use the predefined regular expression pattern `boxed_pattern` to find all occurrences
+    # of the \\boxed{} environment in the completion string.
+    # `findall` returns a list of all non-overlapping matches in the string.
+    match = boxed_pattern.findall(completion)
+    # Check if any matches were found. If so, return the content of the last match.
+    # If no matches were found, return None.
+    return match[-1] if match else None
 
 def compute_format_score(completion: str) -> float:
     """
@@ -174,7 +127,7 @@ def compute_format_score(completion: str) -> float:
     """
     # Check if the completion string matches the predefined format
     # If it does, return 1 as the format reward; otherwise, return 0
-    return 1 if check_format(completion) else 0
+    return 1 if parse_response(completion) is not None else 0
 
 def compute_f1_score(
     completion: str, 
@@ -197,8 +150,10 @@ def compute_f1_score(
     Returns:
         float: The computed F1 score.
     """
+    # Parse the completion string using the parse_response function
+    pared_completion = parse_response(completion)
     # Check if the completion string does not match the predefined format
-    if not check_format(completion):
+    if pared_completion is None:
         # Extract the prediction from the completion string. 
         # If extraction fails, default to an empty string.
         prediction = extract_boxed(completion) or ""
@@ -209,7 +164,7 @@ def compute_f1_score(
         return f1
     else:
         # If the completion string matches the format, extract the answer from the completion.
-        prediction = extract_answer(completion)
+        prediction = pared_completion["answer"]
         # Calculate the F1 score by passing the prediction and ground truth answers 
         # to the scorer function from the question_answering module in scorers.
         f1 = scorers.question_answering.scorer(prediction, ground_truths)["f1"]
@@ -233,13 +188,15 @@ def compute_math_score(
         completion (str): The input string containing the predicted answer.
         ground_truths (List[str]): A list of ground truth answers.
         is_validate (bool, optional): A flag indicating whether the function is in validation mode. Defaults to False.
-        math_verify (bool, optional): If True, perform mathematical verification; otherwise, do a simple string comparison. Defaults to True.
+        math_verify (bool, optional): If True, perform mathematical verification; otherwise, do a simple string comparison. Defaults to False.
 
     Returns:
         float: 1.0 if the prediction is mathematically equivalent to any ground truth, 0.0 otherwise.
     """
+    # Parse the completion string using the parse_response function
+    pared_completion = parse_response(completion)
     # Check if the completion string does not match the predefined format
-    if not check_format(completion):
+    if pared_completion is None:
         # Extract the prediction from the completion string, default to an empty string if extraction fails
         prediction = extract_boxed(completion) or ""
         # Iterate through each ground truth answer
@@ -252,7 +209,7 @@ def compute_math_score(
         return 0.0
     else:
         # If the completion string matches the format, extract the answer from the completion
-        prediction = extract_answer(completion)
+        prediction = pared_completion["answer"]
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
@@ -465,9 +422,6 @@ class Scorer:
                 [completion] * 4
             )
         ]
-
-        if self.is_validate:
-            accuracy_score = max(accuracy_score, 0.0)
 
         score_details = {
             "accuracy_score": accuracy_score,
