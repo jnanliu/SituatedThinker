@@ -175,7 +175,7 @@ def load_math500(split: str) -> datasets.Dataset:
         {
             "question": example["problem"],
             "answer": [example["answer"]],
-            "data_source": "aime25",
+            "data_source": "math500",
             "data_type": DataType.MATH,
             "idx": sample_id
         },
