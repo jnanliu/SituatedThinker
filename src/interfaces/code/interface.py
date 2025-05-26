@@ -1,6 +1,8 @@
 import os
 import traceback
 import asyncio
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv("runtime.env"))
 
 from interfaces.base import BaseInterface
 from interfaces.code import sandboxfusion_executor
@@ -20,7 +22,7 @@ class CodeExecution(BaseInterface):
             query_format="code snippets",
             max_invoke_num=5
         )
-        self.semphare = asyncio.Semaphore(16)
+        self.semphare = asyncio.Semaphore(32)
 
     async def invoke(
         self, 

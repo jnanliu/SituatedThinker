@@ -4,6 +4,8 @@ import asyncio
 import aiohttp
 import logging
 from typing import List, Optional
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv("runtime.env"))
 
 from tenacity import RetryCallState
 from sandbox_fusion.common import trim_slash
