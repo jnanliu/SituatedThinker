@@ -95,9 +95,6 @@ class vLLMRollout(BaseRollout):
         max_num_batched_tokens = self.config.get('max_num_batched_tokens', 8192)
 
         if kwargs.get("train_tp") is not None:
-            # deployed with megatron
-            import os
-
             os.environ["CUDA_TIMER_STREAM_KAFKA_ENABLE"] = "0"
             os.environ["MEGATRON_IMPORT_TIMERS"] = "0"
             if vllm_version in (
@@ -265,9 +262,7 @@ class vLLMRollout(BaseRollout):
                 'top_p': self.config.val_kwargs.top_p,
                 'temperature': self.config.val_kwargs.temperature,
                 "n": 1,  # if validate, already repeat in ray_trainer
-            }
-
-        
+            }        
 
         # users can customize different sampling_params at different run
         with self.update_sampling_params(**kwargs):
@@ -294,7 +289,7 @@ class vLLMRollout(BaseRollout):
                 response_result_mask.append(output.result_mask[:max_length])
                 over_invocation.append(output.over_invocation)
                 failed_invocation.append(output.failed_invocation)
-                over_long.append(output.overlong)
+                over_long.append(output.over_long)
 
             response = pad_2d_list_to_length(response, self.pad_token_id, max_length).to(idx.device)
             response_result_mask = pad_2d_list_to_length(response_result_mask, 0, max_length).to(idx.device)

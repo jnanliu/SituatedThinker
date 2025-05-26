@@ -457,9 +457,9 @@ class SituatedThinkerLLM(LLM):
                             final_output = output
                             # Add additional attributes to the final output
                             setattr(final_output, "result_mask", [0] * len(output.outputs[0].token_ids))
-                            setattr(final_output, "overinvoke", False)
-                            setattr(final_output, "overlong", False)
-                            setattr(final_output, "invoke_fail", False)
+                            setattr(final_output, "over_invocation", False)
+                            setattr(final_output, "over_long", False)
+                            setattr(final_output, "failed_invocation", False)
                         else:
                             final_output = self.request_infos[output.request_id].output
                             # Merge the current output with the existing one
@@ -517,7 +517,8 @@ class SituatedThinkerLLM(LLM):
                             # Add the request back to the LLM engine if generation should continue
                             self.llm_engine.add_request(
                                 task_output.request_id,
-                                task_output.prompt,
+                                # task_output.prompt,
+                                TokensPrompt(prompt_token_ids=task_output.prompt),
                                 task_output.params,
                                 lora_request=task_output.lora_request,
                                 prompt_adapter_request=task_output.prompt_adapter_request,
