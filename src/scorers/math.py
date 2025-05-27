@@ -73,84 +73,84 @@ REMOVED_EXPRESSIONS = [
     "\\dots",
 ]
 
-def timeout(seconds: float):
-    """
-    A decorator factory that adds a timeout mechanism to a function.
+# def timeout(seconds: float):
+#     """
+#     A decorator factory that adds a timeout mechanism to a function.
 
-    Args:
-        seconds (float): The maximum number of seconds the function is allowed to run before timing out.
+#     Args:
+#         seconds (float): The maximum number of seconds the function is allowed to run before timing out.
 
-    Returns:
-        Callable: A decorator that can be applied to a function to add a timeout.
-    """
-    def decorator(func: Callable[..., Any]) -> Callable[..., Coroutine[Any, Any, T]]:
-        """
-        A decorator that wraps a given function with a timeout mechanism.
+#     Returns:
+#         Callable: A decorator that can be applied to a function to add a timeout.
+#     """
+#     def decorator(func: Callable[..., Any]) -> Callable[..., Coroutine[Any, Any, T]]:
+#         """
+#         A decorator that wraps a given function with a timeout mechanism.
 
-        Args:
-            func (Callable[..., Any]): The function to be wrapped with a timeout.
+#         Args:
+#             func (Callable[..., Any]): The function to be wrapped with a timeout.
 
-        Returns:
-            Callable[..., Coroutine[Any, Any, T]]: An asynchronous wrapper function with timeout capability.
-        """
-        @wraps(func)
-        async def wrapper(*args: Any, **kwargs: Any) -> T:
-            """
-            An asynchronous wrapper function that executes the original function with a timeout.
-
-            Args:
-                *args (Any): Positional arguments passed to the original function.
-                **kwargs (Any): Keyword arguments passed to the original function.
-
-            Returns:
-                T: The return value of the original function if it completes within the timeout.
-
-            Raises:
-                TimeoutError: If the original function does not complete within the specified timeout.
-            """
-            # Check if the original function is a coroutine function
-            is_coroutine = asyncio.iscoroutinefunction(func)
-            
-            async def execute() -> T:
-                """
-                An asynchronous helper function to execute the original function.
-
-                Returns:
-                    T: The return value of the original function.
-                """
-                if is_coroutine:
-                    # If the function is a coroutine, await it directly
-                    return await func(*args, **kwargs)
-                else:
-                    # If the function is not a coroutine, run it in a separate thread
-                    return await asyncio.to_thread(func, *args, **kwargs)
-            try:
-                # Wait for the function to complete within the specified timeout
-                return await asyncio.wait_for(execute(), timeout=seconds)
-            except asyncio.TimeoutError:
-                # Raise a TimeoutError if the function does not complete in time
-                raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
-            except Exception as e:
-                # Raise any other exceptions that occur during execution
-                raise e
-                
-        return wrapper
-    return decorator
-
-# def timeout(seconds):
-#     def decorator(func):
+#         Returns:
+#             Callable[..., Coroutine[Any, Any, T]]: An asynchronous wrapper function with timeout capability.
+#         """
 #         @wraps(func)
-#         def wrapper(*args, **kwargs):
-#             with ThreadPoolExecutor(max_workers=1) as executor:
-#                 future = executor.submit(func, *args, **kwargs)
-#                 try:
-#                     return future.result(timeout=seconds)
-#                 except FuturesTimeoutError:
-#                     raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
-#                 except Exception as e:
-#                     raise e
+#         async def wrapper(*args: Any, **kwargs: Any) -> T:
+#             """
+#             An asynchronous wrapper function that executes the original function with a timeout.
+
+#             Args:
+#                 *args (Any): Positional arguments passed to the original function.
+#                 **kwargs (Any): Keyword arguments passed to the original function.
+
+#             Returns:
+#                 T: The return value of the original function if it completes within the timeout.
+
+#             Raises:
+#                 TimeoutError: If the original function does not complete within the specified timeout.
+#             """
+#             # Check if the original function is a coroutine function
+#             is_coroutine = asyncio.iscoroutinefunction(func)
+            
+#             async def execute() -> T:
+#                 """
+#                 An asynchronous helper function to execute the original function.
+
+#                 Returns:
+#                     T: The return value of the original function.
+#                 """
+#                 if is_coroutine:
+#                     # If the function is a coroutine, await it directly
+#                     return await func(*args, **kwargs)
+#                 else:
+#                     # If the function is not a coroutine, run it in a separate thread
+#                     return await asyncio.to_thread(func, *args, **kwargs)
+#             try:
+#                 # Wait for the function to complete within the specified timeout
+#                 return await asyncio.wait_for(execute(), timeout=seconds)
+#             except asyncio.TimeoutError:
+#                 # Raise a TimeoutError if the function does not complete in time
+#                 raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
+#             except Exception as e:
+#                 # Raise any other exceptions that occur during execution
+#                 raise e
+                
 #         return wrapper
 #     return decorator
+
+def timeout(seconds):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(func, *args, **kwargs)
+                try:
+                    return future.result(timeout=seconds)
+                except FuturesTimeoutError:
+                    raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
+                except Exception as e:
+                    raise e
+        return wrapper
+    return decorator
 
 def parse(
     pred: str,
@@ -195,13 +195,11 @@ def parse(
     """
     try:
         target_res = get_extraction_regexes(extraction_config)
-        return asyncio.run(
-            timeout(parsing_timeout)(extract_target_from_pred)(
-                pred,
-                target_res,
-                fallback_mode=fallback_mode,
-                extraction_mode=extraction_mode,
-            )
+        return timeout(parsing_timeout)(extract_target_from_pred)(
+            pred,
+            target_res,
+            fallback_mode=fallback_mode,
+            extraction_mode=extraction_mode,
         )
     except Exception:
         logger.exception(f"Error parsing: {pred}")
@@ -293,10 +291,8 @@ def verify(
     """
     def compare_single_extraction_wrapper(g, t):
         try:
-            return asyncio.run(
-                timeout(timeout_seconds)(compare_single_extraction)(
-                    g, t, float_rounding, numeric_precision, strict
-                )
+            return timeout(timeout_seconds)(compare_single_extraction)(
+                g, t, float_rounding, numeric_precision, strict
             )
         except Exception:
             #! Do not attempt to print out the g and t during handling of exception
