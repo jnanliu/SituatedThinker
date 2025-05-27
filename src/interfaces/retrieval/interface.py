@@ -1,5 +1,7 @@
 import os
 import asyncio
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv("runtime.env"))
 
 from interfaces.base import BaseInterface
 

@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def on_retry_error(s):
     e = s.outcome.exception()
     error_msg = "\n".join(traceback.format_exc().split('\n')[-3:])
-    logger.error(f'give up requesting sandbox. error: {error_msg}')
+    # logger.error(f'give up requesting sandbox. error: {error_msg}')
     raise e
 
 def configurable_retry(max_attempts):
