@@ -164,8 +164,8 @@ class SituatedThinkerCompletionScheduler:
             kwargs["temperature"] = self.config.val_kwargs.temperature
             kwargs["top_p"] = self.config.val_kwargs.top_p
         kwargs["stop"] = self.interface_zoo.end_tags
-        if self.tokenizer.eos_token:
-            kwargs["stop"].append(self.tokenizer.eos_token)
+        # if self.tokenizer.eos_token:
+        #     kwargs["stop"].append(self.tokenizer.eos_token)
 
         kwargs.update(sampling_params)
         print(f"[SituatedThinkerScheduler] generate_sequences sampling params: {kwargs}")
@@ -189,7 +189,8 @@ class SituatedThinkerCompletionScheduler:
 
         async def callback(completion_obj: Completion, info: Dict[str, Any], exception: Exception):
             if exception is not None:
-                raise exception
+                print(exception)
+                exit()
             index = info["index"]
             output: CompletionOutput = info["output"]
             request = info["request"]
@@ -199,31 +200,17 @@ class SituatedThinkerCompletionScheduler:
             output.token_ids.extend(token_ids)
             output.result_mask.extend([0] * len(token_ids))
             if choice.finish_reason == "stop":
-                query = None
-                interface = None
-                lpos = [choice.text.rfind(start_tag) for start_tag in self.interface_zoo.start_tags]
-                rpos = [choice.text.rfind(end_tag) for end_tag in self.interface_zoo.end_tags]
-                valid = [l > r for l, r in zip(lpos, rpos)]
-                valid_eng_tags = [(l, end_tag) for l, end_tag, v in zip(lpos, self.interface_zoo.end_tags, valid) if v]
-                valid_eng_tags = sorted(valid_eng_tags, key=lambda x: x[0], reverse=True)
-                if len(valid_eng_tags) > 0:
-                    _, end_tag = valid_eng_tags[0]
-                    interface = self.interface_zoo.get_interface_by_end_tag(end_tag)
-                    query = interface.extract_query(choice.text + end_tag)
-                    end_tag_token_ids = self.tokenizer.encode(end_tag, add_special_tokens=False)
-                    output.token_ids.extend(end_tag_token_ids)
-                    output.result_mask.extend([0] * len(end_tag_token_ids))
-                # if pos[-1] == -1:
-                #     interface = None
-                # for end_tag in self.interface_zoo.end_tags:
-                #     if choice.text.endswith(end_tag):
-                #         interface = self.interface_zoo.get_interface_by_end_tag(end_tag)
-                #         query = interface.extract_query(choice.text)
-                #         break
+                interface = None if choice.stop_reason not in self.interface_zoo.end_tags else self.interface_zoo.get_interface_by_end_tag(choice.stop_reason)
+                query = None if choice.stop_reason not in self.interface_zoo.end_tags else interface.extract_query(choice.text + choice.stop_reason)
 
                 if interface is None:
                     completion_outputs[index] = output
                     return
+                else:
+                    end_tag = choice.stop_reason
+                    end_tag_tokens = self.tokenizer.encode(end_tag, add_special_tokens=False)
+                    output.token_ids.extend(end_tag_tokens)
+                    output.result_mask.extend([0] * len(end_tag_tokens))
                 
                 if query is None:
                     output.failed_invocation = True
@@ -364,7 +351,7 @@ class SituatedThinkerCompletionScheduler:
             for completion_output in completion_outputs
         ]
 
-        responses = pad_2d_list_to_length(responses, self.tokenizer.pad_token_id, self.config.response_length).to(prompts.device)
+        responses = pad_2d_list_to_length(responses, self.tokenizer.eos_token_id, self.config.response_length).to(prompts.device)
         response_result_mask = pad_2d_list_to_length(response_result_mask, 0, self.config.response_length).to(prompts.device)
         response_attention_mask = get_response_mask(response_id=responses, eos_token=self.tokenizer.eos_token_id, dtype=prompt_attention_mask.dtype)
     
