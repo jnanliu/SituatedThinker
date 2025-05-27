@@ -40,10 +40,10 @@ gen_tp=$4
 gpu_memory_utilization=$5
 num_generation_per_prompt=8
 
-if [ $MLP_HOST == $MLP_WORKER_0_HOST ]
-then
-ray start --head --port=8266 &
-sleep 10
+# if [ $MLP_HOST == $MLP_WORKER_0_HOST ]
+# then
+# ray start --head --port=8266 &
+# sleep 10
 
 python3 -m verl.trainer.main_ppo \
     data.train_files="cache/data/grpo/train.parquet" \
@@ -75,7 +75,7 @@ python3 -m verl.trainer.main_ppo \
     actor_rollout_ref.ref.fsdp_config.param_offload="${offload}" \
     actor_rollout_ref.rollout.disable_log_stats=True \
     actor_rollout_ref.rollout.name=vllm \
-    actor_rollout_ref.rollout.mode=async \
+    actor_rollout_ref.rollout.mode=sync \
     actor_rollout_ref.rollout.chat_scheduler=verl.workers.rollout.vllm_rollout.async_situated_thinker_completion_scheduler.SituatedThinkerCompletionScheduler \
     actor_rollout_ref.rollout.interface_zoo=interfaces.retrieval_and_code \
     actor_rollout_ref.rollout.async_chat=False \
@@ -110,9 +110,9 @@ python3 -m verl.trainer.main_ppo \
     trainer.save_freq=50 \
     trainer.test_freq=50 
 
-else
-# init worker
-sleep 10
-ray start --address=$MLP_WORKER_0_HOST:8266 &
-bash -lc -- "sleep infinity"
-fi
+# else
+# # init worker
+# sleep 10
+# ray start --address=$MLP_WORKER_0_HOST:8266 &
+# bash -lc -- "sleep infinity"
+# fi
