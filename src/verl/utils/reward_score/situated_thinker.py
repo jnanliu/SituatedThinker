@@ -175,7 +175,7 @@ def compute_math_score(
     completion: str, 
     ground_truths: List[str], 
     is_validate: bool = False, 
-    math_verify: bool = False,
+    math_verify: bool = True,
 ) -> float:
     """
     Compute the math reward by verifying the mathematical equivalence of the prediction and ground truth.
@@ -202,7 +202,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
@@ -213,7 +213,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
