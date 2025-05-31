@@ -625,11 +625,11 @@ class SituatedThinkerLLM(LLM):
             if self.request_infos[request_id].invoke_num[interface.end_tag] >= interface.max_invoke_num:
                 # Construct the result text indicating the maximum invocation count has been reached
                 result_text = (
-                    f"<result> "
+                    f"\n<result>\n"
                     f"this interface has been invoked for "
                     f"{self.request_infos[request_id].invoke_num[interface.end_tag]} "
-                    f"times and cannot be invoked anymore! "
-                    f"</result>"
+                    f"times and cannot be invoked anymore!"
+                    f"\n</result>\n"
                 )
                 # Return an InvocationOutput object indicating no invocation and failure
                 return InvocationOutput(
@@ -645,9 +645,9 @@ class SituatedThinkerLLM(LLM):
             if query is None:
                 # Construct the result text indicating a format error
                 result_text = (
-                    f"<result> "
-                    f"invocation cannot be parsed due to format error! "
-                    f"</result>"
+                    f"\n<result>\n"
+                    f"invocation cannot be parsed due to format error!"
+                    f"\n</result>\n"
                 )
                 # Return an InvocationOutput object indicating invocation attempt and failure
                 return InvocationOutput(
@@ -666,7 +666,7 @@ class SituatedThinkerLLM(LLM):
                     **interface_kwargs
                 )
                 # Construct the result text with the invocation result
-                result_text = f"<result> {result} </result>"
+                result_text = f"\n<result>\n{result}\n</result>\n"
                 # Return an InvocationOutput object indicating invocation attempt and success status
                 return InvocationOutput(
                     perform_invocation=True,
@@ -678,7 +678,7 @@ class SituatedThinkerLLM(LLM):
                 )
             except asyncio.TimeoutError:
                 # Construct the result text indicating a timeout error
-                result_text = "<result> error when invoking: timeout </result>"
+                result_text = "\n<result>\nerror when invoking: timeout\n</result>\n"
                 # Print the timeout error message
                 print(f"Invocation timeout for request {request_id}, interface: {interface.end_tag}")
                 # Return an InvocationOutput object indicating invocation attempt and failure
@@ -694,7 +694,7 @@ class SituatedThinkerLLM(LLM):
                 # Extract the last three lines of the traceback for error reporting
                 error_msg = "\n".join(traceback.format_exc().split("\n")[-3:])
                 # Construct the result text with the error message
-                result_text = f"<result> error when invoking: {error_msg} </result>"
+                result_text = f"\n<result>\nerror when invoking: {error_msg}\n</result>\n"
                 # Print the invocation error message
                 print(f"Invocation error for request {request_id}, interface: {interface.end_tag}, error: {error_msg}")
                 # Return an InvocationOutput object indicating invocation attempt and failure
