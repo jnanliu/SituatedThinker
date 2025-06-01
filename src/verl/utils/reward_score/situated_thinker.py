@@ -2,6 +2,7 @@ import re
 from typing import List, Dict
 from itertools import islice, zip_longest
 from collections import defaultdict
+from functools import partial
 
 import scorers
 from misc.constant import DataType
@@ -9,25 +10,34 @@ from interfaces import retrieval_and_code
 import scorers.question_answering
 
 
+# Compile a regular expression pattern to match a specific format of strings.
+# This pattern is used to extract reasoning, conclusion, and answer from a given string.
 format_pattern = re.compile(
     r"""
-    ^                               # Start of the string
-    (?P<reasoning>.*?)
-    <conclusion>                    # Match the opening <conclusion> tag
+    ^                                 # Match the start of the string.
+    (?!.*<conclusion>.*<conclusion>)  # Negative lookahead to ensure <conclusion> tag appears only once.
+    (?!.*</conclusion>.*</conclusion>)# Negative lookahead to ensure </conclusion> tag appears only once.
+    (?!.*\\boxed.*\\boxed)            # Negative lookahead to ensure \boxed appears only once.
+    (?P<reasoning>.*?)                # Non-greedily capture any characters and name this group 'reasoning'.
+    \n<conclusion>\n                  # Match a newline, the <conclusion> tag, and another newline.
     # Capture the conclusion part
-    (?P<conclusion>
-        .*?                         # Match any characters non-greedily
+    (?P<conclusion>                   # Start capturing the conclusion part and name this group 'conclusion'.
+        (.*?(?P<answer>\\boxed\{      # Non-greedily capture any characters until "\boxed{", 
+                                     # then start capturing the answer and name this group 'answer'.
+    # Capture the boxed part
+    (.*)                          # Capture any characters that are not curly braces.
+    \}).*?)                           # Match the closing brace of \boxed{} and any remaining characters non-greedily.
     )
-    </conclusion>                   # Match the closing </conclusion> tag
-    $                               # End of the string
+    \n</conclusion>                   # Match a newline, the </conclusion> tag.
+    $                                 # Match the end of the string.
     """,
-    re.DOTALL | re.VERBOSE,
+    re.DOTALL | re.VERBOSE
 )
 boxed_pattern = re.compile(
     r"""
     \\boxed\{                       # Match the literal string "\boxed{"
     # Capture the boxed part
-    ([^{}]*)
+    (.*)
     \}                              # Match the closing brace
     """,
     re.DOTALL | re.VERBOSE,
@@ -50,42 +60,29 @@ def parse_response(completion: str) -> Dict[str, str] | None:
         Dict[str, str] | None: A dictionary containing the keys "reasoning", "conclusion", 
         and "answer", or None if parsing fails.
     """
-    # Check if the number of <conclusion> and </conclusion> tags is correct, 
-    # and if the closing tag appears after the opening tag
-    if (
-        completion.count("<conclusion>") != 1 or 
-        completion.count("</conclusion>") != 1 or 
-        completion.rfind("</conclusion>") < completion.find("<conclusion>")
-    ):
-        # Return None if the format is incorrect
-        return None
-    # Check if the number of \\boxed{} environments is exactly one
-    if completion.count('\\boxed{') != 1:
-        # Return None if the format is incorrect
-        return None
-    
     # Attempt to match the entire completion string using the predefined format_pattern
+    # The format_pattern is designed to enforce specific structural rules on the completion string
+    # such as single occurrence of <conclusion> tags and \boxed{} environment.
     match = format_pattern.match(completion)
     if not match:
-        # Return None if the matching fails
+        # Return None if the matching fails, indicating the string does not meet the required format.
         return None
-    
+
     # Extract the reasoning process from the match result and strip leading and trailing whitespace
+    # The "reasoning" group is defined in the format_pattern regular expression.
     reasoning = match.group("reasoning").strip()
     # Extract the conclusion block from the match result and strip leading and trailing whitespace
+    # The "conclusion" group is defined in the format_pattern regular expression.
     conclusion_block = match.group("conclusion").strip()
-
-    # Attempt to match the entire completion string using the predefined boxed_pattern
-    boxed_match = boxed_pattern.findall(completion)
-    if not boxed_match:
-        # Return None if the matching fails
-        return None
+    # Extract the answer from the match result and strip leading and trailing whitespace
+    # The "answer" group is defined in the format_pattern regular expression.
+    answer = match.group("answer").strip()
     
     # Return a dictionary containing the reasoning process, conclusion block, and answer
     return {
         "reasoning": reasoning,
         "conclusion": conclusion_block,
-        "answer": boxed_match[-1]
+        "answer": answer
     }
 
 def extract_boxed(completion: str) -> str | None:
@@ -108,7 +105,7 @@ def extract_boxed(completion: str) -> str | None:
     match = boxed_pattern.findall(completion)
     # Check if any matches were found. If so, return the content of the last match.
     # If no matches were found, return None.
-    return match[-1] if match else None
+    return match[-1] if len(match) == 1 else None
 
 def compute_format_score(completion: str) -> float:
     """
@@ -202,7 +199,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
@@ -213,7 +210,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
@@ -406,7 +403,11 @@ class Scorer:
         self.is_validate = is_validate
 
         if self.data_type == DataType.MATH:
-            self.compute_accuracy_score = compute_math_score
+            self.compute_accuracy_score = (
+                partial(compute_math_score, math_verify=True)
+                if self.is_validate else
+                partial(compute_math_score, math_verify=False)
+            )
         elif self.data_type == DataType.MULTIHOPQA:
             self.compute_accuracy_score = compute_f1_score
         else:
