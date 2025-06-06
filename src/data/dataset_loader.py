@@ -197,7 +197,7 @@ def load_medqa(split: str) -> datasets.Dataset:
     dataset = dataset.map(lambda example, sample_id:
         {
             "question": example["data"]["Question"],
-            "answer": example["data"]["Correct Option"],
+            "answer": [example["data"]["Correct Option"]],
             "options": "\n".join([f'{k}): {v}' for k, v in example["data"]["Options"].items()]),
             "data_source": "medqa",
             "data_type": DataType.SINGLECHOICE,
@@ -213,7 +213,7 @@ def load_medqa(split: str) -> datasets.Dataset:
     return dataset
 
 def load_gpqa(split: str) -> datasets.Dataset:
-    DATASET_INFOS["gpqa"]
+    assert split in DATASET_INFOS["gpqa"]
 
     dataset = datasets.load_dataset("Idavidrein/gpqa", "gpqa_diamond", split=split)
     columns_to_remove = dataset.column_names
@@ -222,7 +222,7 @@ def load_gpqa(split: str) -> datasets.Dataset:
         import random
         random.seed(42)
         answer_idx = random.randint(0, 3)
-        answer = example["Correct Answer"]
+        answer = [example["Correct Answer"]]
         candidate_answers = [example["Incorrect Answer 1"], example["Incorrect Answer 2"], example["Incorrect Answer 3"]]
         candidate_answers.insert(answer_idx, answer)
         index2letter = {0: "A", 1: "B", 2: "C", 3: "D"}
@@ -247,6 +247,7 @@ def load_gpqa(split: str) -> datasets.Dataset:
 
 def load_webqsp(split: str) -> datasets.Dataset:
     assert split in DATASET_INFOS["webqsp"]
+
     dataset = datasets.load_dataset("rmanluo/RoG-webqsp", split=split)
     columns_to_remove = dataset.column_names
     dataset = dataset.map(lambda example, sample_id:
@@ -269,6 +270,7 @@ def load_webqsp(split: str) -> datasets.Dataset:
 
 def load_wtq(split: str) -> datasets.Dataset:
     assert split in DATASET_INFOS["wtq"]
+
     dataset = datasets.load_dataset("TableQAKit/WTQ", split=split)
     columns_to_remove = dataset.column_names
     dataset = dataset.map(lambda example, sample_id:
@@ -302,9 +304,10 @@ def load_textworld(split: str) -> datasets.Dataset:
     for example in examples:
         dataset.append({
             "question": example["question"],
-            "idx": example["idx"],
+            "answer": [],
             "data_source": "textworld",
-            "data_type": DataType.TEXTGAME
+            "data_type": DataType.TEXTGAME,
+            "idx": example["idx"],
         })
 
     dataset = datasets.Dataset.from_list(dataset)
