@@ -486,7 +486,7 @@ class SituatedThinkerLLM(LLM):
                                 # Calculate the mean elapsed time of completed invocation tasks
                                 invocation_mean_elapsed = (
                                     0.0 if len(completed_tasks) == 0 
-                                    else sum([_task.elapsed for _task in completed_tasks]) / len(completed_tasks)
+                                    else sum([_task.result().elapsed for _task in completed_tasks]) / len(completed_tasks)
                                 )
                                 # Update the tqdm postfix with the estimated token speeds
                                 pbar.postfix = (
@@ -541,7 +541,7 @@ class SituatedThinkerLLM(LLM):
                                     # Calculate the mean elapsed time of completed invocation tasks
                                     invocation_mean_elapsed = (
                                         0.0 if len(completed_tasks) == 0 
-                                        else sum([_task.elapsed for _task in completed_tasks]) / len(completed_tasks)
+                                        else sum([_task.result().elapsed for _task in completed_tasks]) / len(completed_tasks)
                                     )
                                     # Update the tqdm postfix with the estimated token speeds
                                     pbar.postfix = (
