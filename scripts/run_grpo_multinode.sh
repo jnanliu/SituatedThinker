@@ -40,10 +40,10 @@ gen_tp=$4
 gpu_memory_utilization=$5
 num_generation_per_prompt=8
 
-# if [ $MLP_HOST == $MLP_WORKER_0_HOST ]
-# then
-# ray start --head --port=8266 &
-# sleep 10
+if [ $MLP_HOST == $MLP_WORKER_0_HOST ]
+then
+ray start --head --port=8266 &
+sleep 10
 
 python3 -m verl.trainer.main_ppo \
     data.train_files="cache/data/grpo/train.parquet" \
@@ -58,7 +58,7 @@ python3 -m verl.trainer.main_ppo \
     +actor_rollout_ref.model.override_config.resid_pdrop=0. \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.strategy=fsdp2 \
+    actor_rollout_ref.actor.strategy=fsdp \
     actor_rollout_ref.actor.ppo_mini_batch_size="${train_batch_size}" \
     actor_rollout_ref.actor.use_dynamic_bsz="${use_dynamic_bsz}" \
     actor_rollout_ref.actor.ppo_max_token_len_per_gpu="${actor_ppo_max_token_len}" \
@@ -100,7 +100,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.resume_mode=disable \
     trainer.project_name="${project_name}" \
     trainer.experiment_name="${exp_name}" \
-    trainer.logger=['console','wandb','swanlab'] \
+    trainer.logger=['console','swanlab'] \
     trainer.nnodes="${nnodes}" \
     trainer.n_gpus_per_node="${n_gpus_per_node}" \
     trainer.log_val_generations=100 \
@@ -110,9 +110,9 @@ python3 -m verl.trainer.main_ppo \
     trainer.save_freq=50 \
     trainer.test_freq=50 
 
-# else
-# # init worker
-# sleep 10
-# ray start --address=$MLP_WORKER_0_HOST:8266 &
-# bash -lc -- "sleep infinity"
-# fi
+else
+# init worker
+sleep 10
+ray start --address=$MLP_WORKER_0_HOST:8266 &
+bash -lc -- "sleep infinity"
+fi
