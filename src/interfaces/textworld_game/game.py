@@ -54,7 +54,7 @@ class Games:
             # Register a game and get its environment ID
             env_id = gym.register_game(
                 # Construct the path to the game file
-                Path(__file__).parents[3].joinpath("cache", "data", "textworld", f"custom_game_{i}.z8"),
+                str(Path(__file__).parents[3].joinpath("cache", "data", "textworld", f"custom_game_{i}.z8")),
                 # Set the maximum number of steps per episode
                 max_episode_steps=100,
                 # Request specific information about the game environment

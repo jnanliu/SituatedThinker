@@ -1,6 +1,6 @@
 import re
 from typing import Union, Dict, List, Tuple
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 import httpx
 from dotenv import load_dotenv, find_dotenv
@@ -11,12 +11,11 @@ BASE_TEMPLATE = """**Interface For {name}**
 
 - **Description:** {description}
 
-- **Query Format:** {start_tag} {query_format} {end_tag}.
+- **Query Format:** {start_tag} ...{query_format}... {end_tag}.
 
 - **Invoke Limit** {invoke_limit}."""
 
-
-class BaseInterface:
+class BaseInterface(ABC):
     def __init__(
         self,
         name: str,
