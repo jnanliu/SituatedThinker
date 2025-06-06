@@ -1,5 +1,6 @@
 from collections import defaultdict
 
+import ray
 from tqdm import tqdm
 import torch
 from transformers import PreTrainedTokenizer
@@ -34,7 +35,8 @@ class SituatedThinkerRewardManager:
         self.max_response_length = max_response_length
         self.is_validate = is_validate
 
-    def _score_one_sample(self, idx: int, data_item: DataProtoItem):
+    @ray.remote(num_cpus=1)
+    def _ray_score_one_sample(self, idx: int, data_item: DataProtoItem):
         """
         Process a single data sample and compute the reward score.
 
@@ -46,26 +48,32 @@ class SituatedThinkerRewardManager:
             dict: A dictionary containing the index, prompt, valid prompt length, response, 
                   valid response length, ground truth, data source, data type, and score dictionary.
         """
-        # Extract prompt IDs from the current data item
+
+        # Extract the prompt token IDs from the current data item
         prompt_ids = data_item.batch['prompts']
+
         # Get the length of the prompt
         prompt_length = prompt_ids.shape[-1]
 
         # Calculate the valid length of the prompt using the attention mask
         valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
-        # Extract the valid part of the prompt IDs
+
+        # Extract the valid part of the prompt token IDs
         valid_prompt_ids = prompt_ids[-valid_prompt_length:]
 
-        # Extract response IDs from the current data item
+        # Extract the response token IDs from the current data item
         response_ids = data_item.batch['responses']
+
         # Calculate the valid length of the response using the attention mask
         valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum().item()
-        # Extract the valid part of the response IDs
+
+        # Extract the valid part of the response token IDs
         valid_response_ids = response_ids[:valid_response_length]
 
-        # Decode the valid prompt IDs to a string
+        # Decode the valid prompt token IDs to a string
         prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
-        # Decode the valid response IDs to a string
+
+        # Decode the valid response token IDs to a string
         response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
 
         # Extract the ground truth from the non-tensor batch
@@ -73,19 +81,22 @@ class SituatedThinkerRewardManager:
 
         # Extract the data source from the non-tensor batch
         data_source = data_item.non_tensor_batch['data_source']
+
         # Extract the data type from the non-tensor batch
         data_type = data_item.non_tensor_batch['data_type']
 
-        # Initialize the scorer based on the data type and get the score computation function
+        # Initialize a scorer based on the data type and get the score computation function
         compute_score_fn = Scorer(data_type, self.is_validate).compute_score
+
         # Compute the score dictionary for the current response and ground truth
         score_dict = compute_score_fn(response_str, ground_truth)
 
-        # Count the number of query scores to determine if there's no invocation
+        # Count the number of invocation scores to determine if there's no invocation
         invocation_count = 0
         for k, v in score_dict.items():
             if k.endswith("invocation_score"):
                 invocation_count += v
+
         # Calculate the no-invocation penalty score
         no_invocation_penalty_reward = -1.0 if (
             invocation_count == 0 and (score_dict["accuracy_score"] <= 0)
@@ -105,9 +116,129 @@ class SituatedThinkerRewardManager:
 
         # Get the accuracy score from the score dictionary
         reward = score_dict["accuracy_score"]
-        # Adjust the reward if the format score is 0 and accuracy score is 0
-        if not self.is_validate and score_dict["format_score"] == 0 and reward == 0: 
-            reward = -0.1
+
+        # Adjust the reward if not in validation mode and the format score is 0
+        if not self.is_validate and score_dict["format_score"] == 0: 
+            reward = reward or -0.1
+        # Adjust the reward if not in validation mode and the format score is 1
+        if not self.is_validate and score_dict["format_score"] == 1:
+            reward = reward # or 0.1
+        # Set the reward to 0 if the response is too long
+        if data_item.non_tensor_batch["over_long"]:
+            reward = 0.0
+
+        # Update the score dictionary with penalty rewards and the final reward
+        score_dict.update({
+            "no_invocation_penalty_reward": no_invocation_penalty_reward,
+            "over_invocation_penalty_reward": over_invocation_penalty_reward,
+            "failed_invocation_penalty_reward": failed_invocation_penalty_reward,
+            "length_penalty_reward": length_penalty_reward,
+            "reward": reward 
+        })
+
+        return {
+            "idx": idx,
+            "prompt": prompt_str,
+            "valid_prompt_length": valid_prompt_length,
+            "response": response_str,
+            "valid_response_length": valid_response_length,
+            "ground_truth": ground_truth,
+            "data_source": data_source,
+            "data_type": data_type,
+            "score_dict": score_dict
+        }
+
+
+    def _score_one_sample(self, idx: int, data_item: DataProtoItem):
+        """
+        Process a single data sample and compute the reward score.
+
+        Args:
+            idx (int): The index of the current data sample.
+            data_item (DataProtoItem): An instance of DataProtoItem containing the data sample.
+
+        Returns:
+            dict: A dictionary containing the index, prompt, valid prompt length, response, 
+                  valid response length, ground truth, data source, data type, and score dictionary.
+        """
+
+        # Extract the prompt token IDs from the current data item
+        prompt_ids = data_item.batch['prompts']
+
+        # Get the length of the prompt
+        prompt_length = prompt_ids.shape[-1]
+
+        # Calculate the valid length of the prompt using the attention mask
+        valid_prompt_length = data_item.batch['attention_mask'][:prompt_length].sum()
+
+        # Extract the valid part of the prompt token IDs
+        valid_prompt_ids = prompt_ids[-valid_prompt_length:]
+
+        # Extract the response token IDs from the current data item
+        response_ids = data_item.batch['responses']
+
+        # Calculate the valid length of the response using the attention mask
+        valid_response_length = data_item.batch['attention_mask'][prompt_length:].sum().item()
+
+        # Extract the valid part of the response token IDs
+        valid_response_ids = response_ids[:valid_response_length]
+
+        # Decode the valid prompt token IDs to a string
+        prompt_str = self.tokenizer.decode(valid_prompt_ids, skip_special_tokens=True)
+
+        # Decode the valid response token IDs to a string
+        response_str = self.tokenizer.decode(valid_response_ids, skip_special_tokens=True)
+
+        # Extract the ground truth from the non-tensor batch
+        ground_truth = data_item.non_tensor_batch['reward_model']['ground_truth']
+
+        # Extract the data source from the non-tensor batch
+        data_source = data_item.non_tensor_batch['data_source']
+
+        # Extract the data type from the non-tensor batch
+        data_type = data_item.non_tensor_batch['data_type']
+
+        # Initialize a scorer based on the data type and get the score computation function
+        compute_score_fn = Scorer(data_type, self.is_validate).compute_score
+
+        # Compute the score dictionary for the current response and ground truth
+        score_dict = compute_score_fn(response_str, ground_truth)
+
+        # Count the number of invocation scores to determine if there's no invocation
+        invocation_count = 0
+        for k, v in score_dict.items():
+            if k.endswith("invocation_score"):
+                invocation_count += v
+
+        # Calculate the no-invocation penalty score
+        no_invocation_penalty_reward = -1.0 if (
+            invocation_count == 0 and (score_dict["accuracy_score"] <= 0)
+        ) else 0.0
+
+        # Calculate the over-invocation penalty score
+        over_invocation_penalty_reward = -1.0 if data_item.non_tensor_batch["over_invocation"] else 0.0
+
+        # Calculate the invocation failure penalty score
+        failed_invocation_penalty_reward = -1.0 if data_item.non_tensor_batch["failed_invocation"] else 0.0
+
+        # Calculate the length penalty score based on the response length
+        if valid_response_length <= self.max_response_length - 2048:
+            length_penalty_reward = 0.0
+        else:
+            length_penalty_reward = (self.max_response_length - 2048 - valid_response_length) / 2048
+
+        # Get the accuracy score from the score dictionary
+        reward = score_dict["accuracy_score"]
+
+        # Adjust the reward if not in validation mode and the format score is 0
+        if not self.is_validate and score_dict["format_score"] == 0: 
+            reward = reward or -0.1
+        # Adjust the reward if not in validation mode and the format score is 1
+        if not self.is_validate and score_dict["format_score"] == 1:
+            reward = reward # or 0.1
+        # Set the reward to 0 if the response is too long
+        if data_item.non_tensor_batch["over_long"]:
+            reward = 0.0
 
         # Update the score dictionary with penalty rewards and the final reward
         score_dict.update({
@@ -150,12 +281,16 @@ class SituatedThinkerRewardManager:
         # Dictionary to keep track of the number of data sources already printed
         already_print_data_sources = {}
         # List to store detailed score information for each data item
-        reward_extra_info_list = [None for _ in range(len(data))]
+        reward_extra_info_list = [{} for _ in range(len(data))]
 
+        results = []
         # Iterate over each data item in the dataset with a progress bar
-        for idx, data_item in tqdm(enumerate(data), total=len(data), desc="Rewarding", disable=True):
+        for idx, data_item in tqdm(enumerate(data), total=len(data), desc="Rewarding", disable=True, leave=False):
             # Process a single data sample and get the result
             result = self._score_one_sample(idx, data_item)
+            results.append(result)
+
+        for result in results:
             # Extract relevant information from the result
             idx = result["idx"]
             prompt_str = result["prompt"]

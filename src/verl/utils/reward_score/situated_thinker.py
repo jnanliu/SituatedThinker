@@ -105,7 +105,7 @@ def extract_boxed(completion: str) -> str | None:
     match = boxed_pattern.findall(completion)
     # Check if any matches were found. If so, return the content of the last match.
     # If no matches were found, return None.
-    return match[-1] if len(match) == 1 else None
+    return match[-1] if match else None
 
 def compute_format_score(completion: str) -> float:
     """
@@ -199,7 +199,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
@@ -210,7 +210,7 @@ def compute_math_score(
         # Iterate through each ground truth answer
         for ground_truth in ground_truths:
             # Verify the mathematical equivalence of the prediction and ground truth with a 10-second timeout
-            if scorers.math.scorer(prediction, ground_truth, timeout=10, math_verify=math_verify)["correct"]:
+            if scorers.math.scorer(prediction, ground_truth, timeout=5, math_verify=math_verify)["correct"]:
                 # Return 1.0 if an equivalent answer is found
                 return 1.0
         # Return 0.0 if no equivalent answer is found
@@ -396,22 +396,37 @@ def compute_reflection_score(completion: str) -> float:
     reflection_pattern_words = check_reflection_pattern(completion)
     return sum(reflection_pattern_words.values())
 
-
 class Scorer:
     def __init__(self, data_type: DataType, is_validate: bool = False):
         self.data_type = data_type
         self.is_validate = is_validate
 
         if self.data_type == DataType.MATH:
-            self.compute_accuracy_score = (
-                partial(compute_math_score, math_verify=True)
-                if self.is_validate else
-                partial(compute_math_score, math_verify=False)
-            )
+            self.compute_accuracy_score = partial(compute_math_score, math_verify=True)
         elif self.data_type == DataType.MULTIHOPQA:
             self.compute_accuracy_score = compute_f1_score
         else:
             raise ValueError(f"Unsupported data type: {self.data_type}")
+        
+    @property
+    def compute_score(self):
+        return self.compute_accuracy_score
+    
+    @property
+    def compute_format_score(self):
+        return compute_format_score
+    
+    @property
+    def compute_invocation_score(self):
+        return compute_invocation_score
+
+    @property
+    def compute_repeat_score(self):
+        return compute_repeat_score
+    
+    @property
+    def compute_reflection_score(self):
+        return compute_reflection_score
 
     def compute_score(self, completion: str, ground_truth: str | List[str]) -> Dict[str, float]:
         accuracy_score = self.compute_accuracy_score(completion, ground_truth, self.is_validate)
