@@ -3,7 +3,6 @@ from abc import ABC, abstractclassmethod
 from typing import List, Tuple, Dict, Any
 from pathlib import Path
 from functools import partial
-from concurrent.futures import ProcessPoolExecutor, as_completed
 from collections import defaultdict
 import json
 
@@ -11,6 +10,8 @@ from datasets import Dataset
 import numpy as np
 from tqdm import tqdm
 from pprint import pprint
+from dotenv import load_dotenv, find_dotenv
+load_dotenv(find_dotenv("runtime.env"))
 
 from misc.utils import check_hf_ckpt_prepared, convert_fsdp_to_hf, clean_fsdp
 from interfaces.base import InterfaceZoo
@@ -39,7 +40,7 @@ class BaseEvaluator(ABC):
 
         self.llm = SituatedThinkerLLM(
             interface_zoo, 
-            hf_path, 
+            str(hf_path), 
             tensor_parallel_size=tensor_parallel_size, 
             gpu_memory_utilization=gpu_memory_utilization
         )
@@ -54,8 +55,7 @@ class BaseEvaluator(ABC):
             top_p=top_p,
             top_k=top_k,
             max_tokens=max_tokens, 
-            seed=42, 
-            stop=["</conclusion>"]
+            seed=42,
         )
 
         self.output_path = output_path
@@ -78,7 +78,7 @@ class BaseEvaluator(ABC):
         raise NotImplementedError
     
     @abstractclassmethod
-    def score(self, idx: int, response: str, ground_truths: List[str]) -> Tuple[int, Dict[str, Any]]:
+    def score(self, response: str, ground_truths: List[str]) -> Tuple[int, Dict[str, Any]]:
         raise NotImplementedError
     
     def reduce_metric(self, metrics: List[Dict[str, Any]], data_source: str) -> Dict[str, Any]:
@@ -136,23 +136,15 @@ class BaseEvaluator(ABC):
         responses = [output.outputs[0].text for output in outputs]
 
         repeat_item = lambda items: [item for item in items for _ in range(self.n)]
-        data_types = repeat_item(eval_dataset["data_type"], self.n)
-        data_sources = repeat_item(eval_dataset["data_source"], self.n)
-        answers = repeat_item(eval_dataset["answer"], self.n)
-        sample_idxs = repeat_item(eval_dataset["idx"], self.n)
-        prompts = repeat_item(prompts, self.n)
+        data_types = repeat_item(eval_dataset["data_type"])
+        data_sources = repeat_item(eval_dataset["data_source"])
+        answers = repeat_item(eval_dataset["answer"])
+        sample_idxs = repeat_item(eval_dataset["idx"])
+        prompts = repeat_item(prompts)
 
         metrics = []
-        with ProcessPoolExecutor(16) as executor:
-            tasks = [
-                executor.submit(self.score, response, answer, task_idx) 
-                for task_idx, (response, answer) in enumerate(zip(responses, answers))
-            ]
-            for completed_task in tqdm(as_completed(tasks), total=len(tasks), desc="Computing Metrics"):
-                task_idx, result = completed_task.result()
-                metrics.append((task_idx, result))
-        metrics = sorted(metrics, key=lambda x: x[0])
-        metrics = [metric for _, metric in metrics]
+        for response, answer in zip(responses, answers):
+            metrics.append(self.score(response, answer))
 
         data2metric = defaultdict(list)
         for data_source, metric, sample_idx, response, prompt in zip(data_sources, metrics, sample_idxs, responses, prompts):
@@ -163,6 +155,7 @@ class BaseEvaluator(ABC):
         for data_source in data2metric:
             data2metric[data_source] = self.reduce_metric(data2metric[data_source], data_source)
 
+        Path(self.output_path).parent.mkdir(parents=True, exist_ok=True)
         with open(self.output_path, "w", encoding="utf-8") as f:
             json.dump(data2metric, f, ensure_ascii=False, indent=4)
 

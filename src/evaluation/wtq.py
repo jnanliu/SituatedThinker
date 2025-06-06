@@ -31,7 +31,7 @@ class WTQEvaluator(BaseEvaluator):
         )
         return eval_dataset
 
-    def score(self, idx: int, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
+    def score(self, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
         prediction = extract_boxed(response) or ""
         score_details = scorer(prediction, ground_truths)
 
@@ -40,7 +40,7 @@ class WTQEvaluator(BaseEvaluator):
             "ground_truths": score_details["ground_truths"],
             "accuracy": score_details["cover_em_2"],
         }
-        return idx, metrics
+        return metrics
 
 
 if __name__ == "__main__":

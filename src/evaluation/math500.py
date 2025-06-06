@@ -25,23 +25,23 @@ class MATH500Evaluator(BaseEvaluator):
         )
         return eval_dataset
 
-    def score(self, idx: int, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
+    def score(self, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
         prediction = extract_boxed(response) or ""
 
         for ground_truth in ground_truths:
-            if scorer(prediction, ground_truth, timeout=10, math_verify=True):
+            if scorer(prediction, ground_truth, timeout=10, math_verify=True)["correct"]:
                 metrics = {
                     "accuracy": 1, 
                     "prediction": prediction, 
                     "ground_truths": ground_truths
                 }
-                return idx, metrics
+                return metrics
         metrics = {
             "accuracy": 0, 
             "prediction": prediction, 
             "ground_truths": ground_truths
         }
-        return idx, metrics
+        return metrics
 
 
 if __name__ == "__main__":

@@ -32,20 +32,20 @@ class MedQAEvaluator(BaseEvaluator):
         )
         return eval_dataset
 
-    def score(self, idx: int, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
+    def score(self, response: str, ground_truths: str) -> Tuple[int, Dict[str, Any]]:
         prediction = extract_boxed(response) or ""
 
         prediction = prediction.lower()
         if prediction.endswith(")"):
             prediction = prediction.split(")")[:-1]
-        ground_truth = ground_truth.lower()
+        ground_truths = [ground_truth.lower() for ground_truth in ground_truths]
 
         metrics = {
             "prediction": prediction,
             "ground_truths": ground_truths,
             "accuracy": any([prediction == ground_truth for ground_truth in ground_truths]),
         }
-        return idx, metrics
+        return metrics
 
 
 if __name__ == "__main__":
