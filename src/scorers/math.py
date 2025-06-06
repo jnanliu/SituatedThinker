@@ -1,10 +1,9 @@
 import re
 import logging
-from typing import TypeVar, Sequence, Literal, Callable, Any, Coroutine, Optional, Union, cast
+from typing import TypeVar, Sequence, Literal, Dict, Any
 from itertools import product
 from functools import wraps
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
-import asyncio
+import signal
 
 from sympy import Basic, MatrixBase
 from latex2sympy2_extended import NormalizationConfig
@@ -73,83 +72,25 @@ REMOVED_EXPRESSIONS = [
     "\\dots",
 ]
 
-# def timeout(seconds: float):
-#     """
-#     A decorator factory that adds a timeout mechanism to a function.
-
-#     Args:
-#         seconds (float): The maximum number of seconds the function is allowed to run before timing out.
-
-#     Returns:
-#         Callable: A decorator that can be applied to a function to add a timeout.
-#     """
-#     def decorator(func: Callable[..., Any]) -> Callable[..., Coroutine[Any, Any, T]]:
-#         """
-#         A decorator that wraps a given function with a timeout mechanism.
-
-#         Args:
-#             func (Callable[..., Any]): The function to be wrapped with a timeout.
-
-#         Returns:
-#             Callable[..., Coroutine[Any, Any, T]]: An asynchronous wrapper function with timeout capability.
-#         """
-#         @wraps(func)
-#         async def wrapper(*args: Any, **kwargs: Any) -> T:
-#             """
-#             An asynchronous wrapper function that executes the original function with a timeout.
-
-#             Args:
-#                 *args (Any): Positional arguments passed to the original function.
-#                 **kwargs (Any): Keyword arguments passed to the original function.
-
-#             Returns:
-#                 T: The return value of the original function if it completes within the timeout.
-
-#             Raises:
-#                 TimeoutError: If the original function does not complete within the specified timeout.
-#             """
-#             # Check if the original function is a coroutine function
-#             is_coroutine = asyncio.iscoroutinefunction(func)
-            
-#             async def execute() -> T:
-#                 """
-#                 An asynchronous helper function to execute the original function.
-
-#                 Returns:
-#                     T: The return value of the original function.
-#                 """
-#                 if is_coroutine:
-#                     # If the function is a coroutine, await it directly
-#                     return await func(*args, **kwargs)
-#                 else:
-#                     # If the function is not a coroutine, run it in a separate thread
-#                     return await asyncio.to_thread(func, *args, **kwargs)
-#             try:
-#                 # Wait for the function to complete within the specified timeout
-#                 return await asyncio.wait_for(execute(), timeout=seconds)
-#             except asyncio.TimeoutError:
-#                 # Raise a TimeoutError if the function does not complete in time
-#                 raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
-#             except Exception as e:
-#                 # Raise any other exceptions that occur during execution
-#                 raise e
-                
-#         return wrapper
-#     return decorator
 
 def timeout(seconds):
     def decorator(func):
+        def handler(signum, frame):
+            raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
         @wraps(func)
         def wrapper(*args, **kwargs):
-            with ThreadPoolExecutor(max_workers=1) as executor:
-                future = executor.submit(func, *args, **kwargs)
-                try:
-                    return future.result(timeout=seconds)
-                except FuturesTimeoutError:
-                    raise TimeoutError(f"Function '{func.__name__}' timed out after {seconds} seconds.")
-                except Exception as e:
-                    raise e
+            old_handler = signal.getsignal(signal.SIGALRM)
+            signal.signal(signal.SIGALRM, handler)
+            signal.alarm(seconds)
+            try:
+                return func(*args, **kwargs)
+            finally:
+                # Cancel the alarm and restore previous handler
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, old_handler)
+
         return wrapper
+
     return decorator
 
 def parse(
@@ -401,7 +342,7 @@ def naive_math_equiv(prediction: str, ground_truth: str) -> bool:
         "ground_truth": ground_truth,
     }
 
-def scorer(prediction: str, ground_truth: str, timeout: int = 60, math_verify: bool = False) -> bool:
+def scorer(prediction: str, ground_truth: str, timeout: int = 5, math_verify: bool = False) -> Dict[str, Any]:
     """
     Determine whether the prediction is equivalent to the ground truth, 
     either by simple string comparison or mathematical verification.
@@ -409,12 +350,14 @@ def scorer(prediction: str, ground_truth: str, timeout: int = 60, math_verify: b
     Args:
         prediction (str): The predicted mathematical expression.
         ground_truth (str): The correct mathematical expression.
-        timeout (int, optional): The timeout duration in seconds for mathematical verification. Defaults to 60.
+        timeout (int, optional): The timeout duration in seconds for mathematical verification. Defaults to 5.
         math_verify (bool, optional): If True, perform mathematical verification; 
                                     if False, perform a simple string comparison. Defaults to False.
 
     Returns:
-        bool: True if the prediction is equivalent to the ground truth, False otherwise.
+        Dict[str, Any]: A dictionary containing the result of the comparison, 
+                       the prediction, and the ground truth. 
+                       The dictionary has keys "correct", "prediction", and "ground_truth".
     """
     if math_verify:
         # Perform mathematical verification using math_equiv function
