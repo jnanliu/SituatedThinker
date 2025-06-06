@@ -335,6 +335,9 @@ class vLLMRollout(BaseRollout):
                 "attention_mask": attention_mask,
                 "position_ids": position_ids,
                 "result_mask": response_result_mask,
+                "over_invocation_mask": torch.tensor(over_invocation).unsqueeze(1).to(idx.device),
+                "failed_invocation_mask": torch.tensor(failed_invocation).unsqueeze(1).to(idx.device),
+                "over_long_mask": torch.tensor(over_long).unsqueeze(1).to(idx.device)
             },
             batch_size=batch_size)
 
