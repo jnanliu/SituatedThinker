@@ -115,5 +115,22 @@ scripts/run_grpo_multinode.sh [llm_name] [num_node] [num_gpu_per_node] [tp_for_r
 
 ### 🧪 Evaluation
 
-*To be added.*
+```bash
+export RETRIEVAL_URL=your_retrieval_url 
 
+scripts/evaluate.sh [dataset_name] [checkpoint_path] [output_path] [num_gpu] [tp_size] [num_generation] [temperature]
+```
+Here, `data_name` can be one of `hotpotqa`, `2wiki`, `musique`, `bamboogle`, `aime24`, `aime25`, `math500`, `medqa`, `gpqa`, `webqsp`, `wtq`, and `textworld`. `checkpoint_path` is the path to the checkpoint saved by veRL, `output_path` is the save path of evalation details, `num_generation` is the number of generations for each question (if `num_generation` > 1, the evaluation metric will be computed by averaging.), and `temperature` is the temperature for sampling.
+
+## 📖 Citation
+If you find our work helpful, please consider citing our paper:
+
+```
+@article{abs-2505-19300,
+  author       = {Junnan Liu and Linhao Luo and Thuy-Trang Vu and Gholamreza Haffari},
+  title        = {SituatedThinker: Grounding LLM Reasoning with Real-World through Situated Thinking},
+  journal      = {CoRR},
+  volume       = {abs/2505.19300},
+  year         = {2025}
+}
+```
